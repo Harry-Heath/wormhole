@@ -17,10 +17,10 @@ pub fn main(init: std.process.Init) !void {
     var diag: zon.Diagnostics = .{};
     const parsed = zon.fromSliceAlloc(Schema, gpa, file, &diag, .{}) catch |err| switch (err) {
         error.ParseZon => {
-            const stdout = try io.lockStderr(&.{}, null);
+            const stderr = try io.lockStderr(&.{}, null);
             defer io.unlockStderr();
 
-            const writer = &stdout.file_writer.interface;
+            const writer = &stderr.file_writer.interface;
             try writer.print("Failed to parse zon file:\n", .{});
             try diag.format(writer);
             std.process.exit(1);

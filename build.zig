@@ -1,47 +1,55 @@
 const std = @import("std");
 
+const Language = enum {
+    all,
+    cpp,
+    ts,
+};
+
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Add CLI
     const mod = b.createModule(.{
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-        .link_libcpp = true,
-    });
-
-    mod.addCSourceFile(.{
-        .file = b.path("src/main.cpp"),
-        .flags = &.{"-std=c++20"},
-    });
-
-    const exe = b.addExecutable(.{
-        .name = "statey",
-        .root_module = mod,
-    });
-
-    b.installArtifact(exe);
-
-    const run_step = b.step("run", "Runs");
-    run_step.dependOn(&b.addRunArtifact(exe).step);
-
-    //
-    const mod2 = b.createModule(.{
         .target = target,
         .optimize = optimize,
         .root_source_file = b.path("src/main.zig"),
     });
-    const exe2 = b.addExecutable(.{
+    const exe = b.addExecutable(.{
         .name = "statey2",
-        .root_module = mod2,
+        .root_module = mod,
     });
-    b.installArtifact(exe2);
+    b.installArtifact(exe);
 
-    const run_step2 = b.step("run2", "Runs2");
-    const run2 = b.addRunArtifact(exe2);
+    const run_step = b.step("run", "Runs");
+    const run = b.addRunArtifact(exe);
     if (b.args) |args| {
-        run2.addArgs(args);
+        run.addArgs(args);
     }
-    run_step2.dependOn(&run2.step);
+    run_step.dependOn(&run.step);
+
+    // Setup tests
+    const test_step = b.step("test", "Run all tests");
+
+    // Cpp tests
+    const cpp_test_mod = b.createModule(.{
+        .target = target,
+        .optimize = .Debug,
+        .link_libc = true,
+        .link_libcpp = true,
+    });
+    cpp_test_mod.addCSourceFile(.{
+        .file = b.path("test/cpp/main.cpp"),
+        .flags = &.{"-std=c++20"},
+    });
+    cpp_test_mod.addIncludePath(b.path("lib/cpp"));
+    const cpp_test_exe = b.addExecutable(.{
+        .name = "cpp_test",
+        .root_module = cpp_test_mod,
+    });
+    const cpp_test_run = b.addRunArtifact(cpp_test_exe);
+    const cpp_test_step = b.step("test-cpp", "Run cpp tests");
+    cpp_test_step.dependOn(&cpp_test_run.step);
+    test_step.dependOn(&cpp_test_run.step);
 }
