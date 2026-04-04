@@ -22,6 +22,8 @@ pub fn build(b: *std.Build) void {
     });
     b.installArtifact(exe);
 
+    mod.addImport("case", b.dependency("case", .{}).module("case"));
+
     const run_step = b.step("run", "Runs");
     const run = b.addRunArtifact(exe);
     if (b.args) |args| {

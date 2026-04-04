@@ -8,4 +8,10 @@
         "lib",
         "test",
     },
+    .dependencies = .{
+        .case = .{
+            .url = "git+https://github.com/archaistvolts/case.git#4869c012ab5ee19cd1a41b5d7a09cd9d4a277c56",
+            .hash = "case-0.0.1-chGYqx_EAABCPjHZFeR8TaiO8BEoeSRib9WskQjET4qo",
+        },
+    },
 }

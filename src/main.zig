@@ -2,6 +2,8 @@ const std = @import("std");
 const zon = std.zon.parse;
 const Io = std.Io;
 const Dir = Io.Dir;
+const Schema = @import("Schema.zig");
+const cpp = @import("cpp.zig");
 
 pub fn main(init: std.process.Init) !void {
     const gpa = init.arena.allocator();
@@ -15,7 +17,7 @@ pub fn main(init: std.process.Init) !void {
 
     // Parse zon
     var diag: zon.Diagnostics = .{};
-    const parsed = zon.fromSliceAlloc(Schema, gpa, file, &diag, .{}) catch |err| switch (err) {
+    const schema = zon.fromSliceAlloc(Schema, gpa, file, &diag, .{}) catch |err| switch (err) {
         error.ParseZon => {
             const stderr = try io.lockStderr(&.{}, null);
             defer io.unlockStderr();
@@ -28,44 +30,5 @@ pub fn main(init: std.process.Init) !void {
         else => return err,
     };
 
-    std.debug.print("{?s}", .{parsed.types[0].description});
+    std.debug.print("{s}", .{try cpp.write(schema, gpa)});
 }
-
-const Schema = struct {
-    types: []const Type = &.{},
-    properties: []const Property,
-};
-
-const Type = struct {
-    name: []const u8,
-    description: ?[]const u8 = null,
-    fields: ?[]const Field = null,
-    values: ?[]const EnumValue = null,
-};
-
-const Property = struct {
-    name: []const u8,
-    description: ?[]const u8 = null,
-    id: u8,
-    array: ?Array = null,
-    type: ?[]const u8 = null,
-    properties: ?[]const Property = null,
-};
-
-const Field = struct {
-    name: []const u8,
-    description: ?[]const u8 = null,
-    array: ?Array = null,
-    type: ?[]const u8 = null,
-    fields: ?[]const Field = null,
-};
-
-const EnumValue = struct {
-    name: []const u8,
-    value: u8,
-};
-
-const Array = union(enum) {
-    variable_length,
-    length: u8,
-};
