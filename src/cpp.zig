@@ -10,6 +10,7 @@ schema: Schema,
 gpa: std.mem.Allocator,
 writer: *IndentedWriter,
 type_map: Map,
+object_map: Map,
 
 pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
     var string: std.Io.Writer.Allocating = .init(gpa);
@@ -20,11 +21,13 @@ pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
         .gpa = gpa,
         .writer = &writer,
         .type_map = .init(gpa),
+        .object_map = .init(gpa),
     };
 
     try self.setupTypeMap();
+    try self.setupObjectMap();
     try self.writeTypes();
-    try self.writeProperties();
+    try self.writeObjects();
 
     return string.written();
 }
@@ -50,6 +53,14 @@ fn setupTypeMap(self: *Self) !void {
     }
 }
 
+fn setupObjectMap(self: *Self) !void {
+    const map = &self.object_map;
+
+    for (self.schema.objects) |o| {
+        try map.put(o.name, try case.allocTo(self.gpa, .pascal, o.name));
+    }
+}
+
 fn writeTypes(self: *Self) !void {
     for (self.schema.types) |t| {
         try self.writeType(t);
@@ -65,9 +76,13 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         return error.BadZon;
     }
 
+    const type_name = self.type_map.get(t.name).?;
+
     // Write struct
     if (t.fields) |fields| {
-        try writer.print("struct {s}", .{self.type_map.get(t.name).?});
+
+        // Struct definition
+        try writer.print("struct {s}", .{type_name});
         try writer.print("{{", .{});
         writer.indent();
 
@@ -81,18 +96,46 @@ fn writeType(self: *Self, t: Schema.Type) !void {
             // Add array field
             if (field.array) |array| switch (array) {
                 .variable_length => try writer.print("std::vector<{s}> {s};", .{ field_type, field_name }),
-                .length => |length| try writer.print("{s} {s}[{}];", .{ field_type, field_name, length }),
+                .length => |length| try writer.print("std::array<{s}, {}> {s};", .{ field_type, length, field_name }),
             }
             // Otherwise just type
             else try writer.print("{s} {s};", .{ field_type, field_name });
         }
 
         writer.deindent();
-        try writer.print("}};", .{});
+        try writer.print("}};\n", .{});
+
+        // Read function
+        try writer.print("static void read(Reader& reader, {s}& value)", .{type_name});
+        try writer.print("{{", .{});
+        writer.indent();
+
+        for (fields) |field| {
+            const field_name = try case.allocTo(self.gpa, .snake, field.name);
+            try writer.print("reader.read(value.{s});", .{field_name});
+        }
+
+        writer.deindent();
+        try writer.print("}}\n", .{});
+
+        // Write function
+        try writer.print("static void write(Writer& writer, const {s}& value)", .{type_name});
+        try writer.print("{{", .{});
+        writer.indent();
+
+        for (fields) |field| {
+            const field_name = try case.allocTo(self.gpa, .snake, field.name);
+            try writer.print("writer.write(value.{s});", .{field_name});
+        }
+
+        writer.deindent();
+        try writer.print("}}\n", .{});
     }
 
     // Write enum
     if (t.values) |values| {
+
+        // Enum definition
         try writer.print("enum class {s}", .{self.type_map.get(t.name).?});
         try writer.print("{{", .{});
         writer.indent();
@@ -103,33 +146,103 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         }
 
         writer.deindent();
-        try writer.print("}};", .{});
+        try writer.print("}};\n", .{});
+
+        // Read function
+        try writer.print("static void read(Reader& reader, {s}& value)", .{type_name});
+        try writer.print("{{", .{});
+        writer.indent();
+
+        try writer.print("uint8_t temp{{}};", .{});
+        try writer.print("reader.read(temp);", .{});
+        try writer.print("value = static_cast<{s}>(temp);", .{type_name});
+
+        writer.deindent();
+        try writer.print("}}\n", .{});
+
+        // Write function
+        try writer.print("static void write(Writer& writer, const {s}& value)", .{type_name});
+        try writer.print("{{", .{});
+        writer.indent();
+
+        try writer.print("writer.write(static_cast<uint8_t>(value));", .{});
+
+        writer.deindent();
+        try writer.print("}}\n", .{});
     }
 }
 
-fn writeStruct(self: *Self, s: Schema.Struct) !void {
-    const writer = self.writer;
+fn writeObjects(self: *Self) !void {
+    for (self.schema.objects) |o| {
+        try self.writeObject(o);
+    }
+}
 
-    try writer.print("struct {s}", .{});
+fn writeObject(self: *Self, o: Schema.Object) !void {
+    const writer = self.writer;
+    const object_name = self.object_map.get(o.name).?;
+
+    try writer.print("struct {s} : public Object", .{object_name});
     try writer.print("{{", .{});
     writer.indent();
 
-    for (self.schema.properties) |property| {
-        try self.writeProperty(property);
+    try writer.print("{s}() = default;", .{object_name});
+    try writer.print("{s}(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {{}}", .{object_name});
+
+    for (o.properties) |p| {
+        try self.writeProperty(p);
     }
 
     writer.deindent();
-    try writer.print("}};", .{});
+    try writer.print("}};\n", .{});
 }
 
-fn writeProperty(self: *Self, property: Schema.Property) !void {
+fn writeProperty(self: *Self, p: Schema.Property) !void {
     const writer = self.writer;
 
-    // Must have either type or properties
-    if ((property.type != null) == (property.properties != null)) {
+    const type_opt = self.type_map.get(p.type);
+    const object_opt = self.object_map.get(p.type);
+
+    // Must have either type or object
+    if ((type_opt != null) == (object_opt != null)) {
         // TODO: print error
         return error.BadZon;
     }
 
-    _ = writer;
+    const field_name = try case.allocTo(self.gpa, .snake, p.name);
+
+    if (type_opt) |t| {
+        // Add array property
+        if (p.array) |array| switch (array) {
+            .variable_length => try writer.print(
+                "Property<std::vector<{s}>> {s}{{ {}, mNode, mRoot }};",
+                .{ t, field_name, p.id },
+            ),
+            .length => |length| try writer.print(
+                "Property<std::array<{s}, {}>> {s}{{ {}, mNode, mRoot }};",
+                .{ t, length, field_name, p.id },
+            ),
+        }
+        // Otherwise just property
+        else try writer.print(
+            "Property<{s}> {s}{{ {}, mNode, mRoot }};",
+            .{ t, field_name, p.id },
+        );
+    }
+
+    if (object_opt) |o| {
+        // Add array property
+        if (p.array) |array| switch (array) {
+            .variable_length => try writer.print(
+                "PropertyArray<{s}> {s}{{ {}, mNode, mRoot }};",
+                .{ o, field_name, p.id },
+            ),
+            .length => return error.TODO,
+        }
+        // Otherwise just property
+        else try writer.print(
+            "{s} {s}{{ {}, mNode, mRoot }};",
+            .{ o, field_name, p.id },
+        );
+    }
 }

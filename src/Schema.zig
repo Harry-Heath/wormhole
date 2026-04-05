@@ -1,5 +1,5 @@
 types: []const Type = &.{},
-structs: []const Struct,
+objects: []const Object,
 
 pub const Type = struct {
     name: []const u8,
@@ -8,8 +8,9 @@ pub const Type = struct {
     values: ?[]const EnumValue = null,
 };
 
-pub const Struct = struct {
+pub const Object = struct {
     name: []const u8,
+    description: ?[]const u8 = null,
     properties: []const Property,
 };
 
@@ -18,8 +19,7 @@ pub const Property = struct {
     description: ?[]const u8 = null,
     id: u8,
     array: ?Array = null,
-    type: ?[]const u8 = null,
-    properties: ?[]const Property = null,
+    type: []const u8,
 };
 
 pub const Field = struct {

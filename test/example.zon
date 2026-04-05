@@ -18,7 +18,38 @@
         },
     },
 
-    .structs = .{
+    .objects = .{
+        .{
+            .name = "Sensor Settings",
+            .description = "",
+            .properties = .{
+                .{
+                    .name = "Resolution",
+                    .description = "Sensor resolution",
+                    .id = 0,
+                    .type = "Resolution",
+                },
+                .{
+                    .name = "Zoom",
+                    .description = "Zoom amount",
+                    .id = 1,
+                    .type = "f32",
+                    .array = .{ .length = 3 },
+                },
+            },
+        },
+        .{
+            .name = "Control Settings",
+            .description = "Stuff to control",
+            .properties = .{
+                .{
+                    .name = "Velocity",
+                    .description = "",
+                    .id = 0,
+                    .type = "Vector Two",
+                },
+            },
+        },
         .{
             .name = "Example",
             .properties = .{
@@ -26,35 +57,14 @@
                     .name = "Sensors",
                     .description = "Settings per sensor",
                     .id = 0,
+                    .type = "Sensor Settings",
                     .array = .variable_length,
-                    .properties = .{
-                        .{
-                            .name = "Resolution",
-                            .description = "Sensor resolution",
-                            .id = 0,
-                            .type = "Resolution",
-                        },
-                        .{
-                            .name = "Zoom",
-                            .description = "Zoom amount",
-                            .id = 1,
-                            .type = "f32",
-                            .array = .{ .length = 3 },
-                        },
-                    },
                 },
                 .{
                     .name = "Controls",
                     .description = "Stuff to control",
                     .id = 1,
-                    .properties = .{
-                        .{
-                            .name = "Velocity",
-                            .description = "",
-                            .id = 0,
-                            .type = "Vector2",
-                        },
-                    },
+                    .type = "Control Settings",
                 },
             },
         },

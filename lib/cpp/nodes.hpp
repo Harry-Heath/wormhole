@@ -29,9 +29,13 @@ struct Node
             mpParent->mNodes.erase(mId);
     }
 
+    Node(const Node&) = delete;
+    Node& operator=(const Node&) = delete;
+
     virtual void read(Reader& reader)
     {
-        uint8_t id = reader.readU8();
+        uint8_t id{};
+        reader.read<uint8_t>(id);
         if (!reader.success()) return;
 
         auto it = mNodes.find(id);
@@ -46,7 +50,7 @@ struct Node
         if (mpParent == nullptr) return;
 
         mpParent->write(writer);
-        writer.writeU8(mId);
+        writer.write<uint8_t>(mId);
     }
 };
 
@@ -55,25 +59,23 @@ template<typename T>
 struct ValueNode : public Node
 {
     T mValue{};
+    std::function<void(const T&)> mChanged;
 
     ValueNode(uint8_t id, Node* parent) : Node(id, parent) {}
 
     void read(Reader& reader) final
     {
-        if      constexpr (std::is_same_v<T, uint8_t>)  mValue = reader.readU8();
-        else if constexpr (std::is_same_v<T, uint16_t>) mValue = reader.readU16();
-        else if constexpr (std::is_same_v<T, uint32_t>) mValue = reader.readU32();
+        reader.read<T>(mValue);
+        if (reader.success() && mChanged) 
+            mChanged(mValue);
     }
 
     void write(Writer& writer) final
     {
         assert(mpParent != nullptr);
-        
-        mpParent->write(writer);
-        writer.writeU8(mId);
 
-        if      constexpr (std::is_same_v<T, uint8_t>)  writer.writeU8(mValue);
-        else if constexpr (std::is_same_v<T, uint16_t>) writer.writeU16(mValue);
-        else if constexpr (std::is_same_v<T, uint32_t>) writer.writeU32(mValue);
+        mpParent->write(writer);
+        writer.write<uint8_t>(mId);
+        writer.write<T>(mValue);
     }
 };

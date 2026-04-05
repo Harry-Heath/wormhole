@@ -1,5 +1,6 @@
 
 #include <string>
+#include <array>
 #include <vector>
 #include <cstdint>
 #include <cstddef>
@@ -7,169 +8,78 @@
 
 #include <state.hpp>
 
-// enum class Type
-// {
-//     U8, U16, U32,
-//     S8, S16, S32,
-//     F32, F64,
-    
-//     ENUM,
-//     ARRAY, 
-//     STRING,
-//     STRUCT,
-// };
-
-// struct EnumValue
-// {
-//     std::string mName;
-//     uint8_t mValue;
-// };
-
-// enum class Access
-// {
-//     READ,
-//     WRITE,
-//     READ_WRITE,
-// };
-
-
-// struct Field
-// {
-//     std::string mName;
-//     Type mType;
-//     uint32_t mArrayLength;
-//     Type mArrayType;
-//     std::vector<Field> mStructFields;
-//     std::vector<EnumValue> mEnumValues;
-// };
-
-// struct PropertyField;
-// struct PropertyArray;
-// using Property = std::variant<PropertyField, PropertyArray>;
-
-
-// struct PropertyField
-// {
-//     uint16_t mId;
-//     std::string mName;
-
-//     Type mType;
-//     Access mAccess = Access::READ;
-//     uint32_t mArrayLength; // Array length of 0 is dynamic
-//     Type mArrayType;
-//     std::vector<Field> mStructFields;
-//     std::vector<EnumValue> mEnumValues;
-// };
-
-// struct PropertyArray
-// {
-//     uint16_t mId;
-//     std::string mName;
-
-//     uint32_t mArrayLength; // Array length of 0 is dynamic
-//     std::vector<Property> mProperties;
-// };
-
-// const std::vector<Property> PROPERTIES = {
-//     PropertyArray{
-//         .mId = 1,
-//         .mName = "sensors",
-//         .mProperties = {
-//             PropertyField{
-//                 .mId = 1,
-//                 .mName = "resolution",
-//                 .mType = Type::STRUCT,
-//                 .mAccess = Access::READ_WRITE,
-//                 .mStructFields = {
-//                     Field{"width", Type::U16},
-//                     Field{"height", Type::U16},
-//                 },
-//             },
-//             PropertyField{
-//                 .mId = 2,
-//                 .mName = "zoom_level",
-//                 .mType = Type::U8,
-//                 .mAccess = Access::READ_WRITE,
-//             },
-//             PropertyField{
-//                 .mId = 3,
-//                 .mName = "video_format",
-//                 .mType = Type::ENUM,
-//                 .mAccess = Access::READ_WRITE,
-//                 .mEnumValues = {
-//                     EnumValue{"h264", 0},
-//                     EnumValue{"hevc", 1},
-//                     EnumValue{"mjpg", 2},
-//                 },
-//             },
-//         },
-//     },
-//     PropertyField{
-//         .mId = 2,
-//         .mName = "controls.velocity_demand",
-//         .mType = Type::STRUCT,
-//         .mAccess = Access::READ_WRITE,
-//         .mStructFields = {
-//             Field{"x", Type::F32},
-//             Field{"y", Type::F32},
-//         },
-//     },
-// };
-
-
-struct ExamplePropertyGroup
+struct VectorTwo
 {
-    Node mNode;
-    PropertyRoot& mRoot;
-
-    ExamplePropertyGroup(uint8_t id, Node& parent, PropertyRoot& root)
-        : mNode{id, &parent}
-        , mRoot{root}
-    {
-    }
-
-    Property<uint8_t> some_value{1, mNode, mRoot};
-    Property<uint16_t> some_other_value{2, mNode, mRoot};
+    float x;
+    float y;
 };
 
-struct ExampleProperties
+static void read(Reader& reader, VectorTwo& value)
 {
-    PropertyRoot mRoot{};
-    Node& mNode = mRoot.mNode;
-    
-    
-    struct Controls
-    {
-        Node mNode;
-        PropertyRoot& mRoot;
-        
-        Controls(uint8_t id, Node& parent, PropertyRoot& root)
-            : mNode{id, &parent}
-            , mRoot{root}
-        {
-        }
+    reader.read(value.x);
+    reader.read(value.y);
+}
 
-        Property<uint8_t> velocity_x{1, mNode, mRoot};
-        Property<uint8_t> velocity_y{2, mNode, mRoot};
-    };
+static void write(Writer& writer, const VectorTwo& value)
+{
+    writer.write(value.x);
+    writer.write(value.y);
+}
 
-    Controls controls{1, mNode, mRoot};
-    PropertyArray<ExamplePropertyGroup> sensors{2, mNode, mRoot};
-    PropertyArray<Property<uint16_t>> some_array{3, mNode, mRoot};
+enum class Resolution
+{
+    R1080P = 0,
+    R720P = 1,
 };
 
+static void read(Reader& reader, Resolution& value)
+{
+    uint8_t temp{};
+    reader.read(temp);
+    value = static_cast<Resolution>(temp);
+}
+
+static void write(Writer& writer, const Resolution& value)
+{
+    writer.write(static_cast<uint8_t>(value));
+}
+
+struct SensorSettings : public Object
+{
+    SensorSettings() = default;
+    SensorSettings(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {}
+    Property<Resolution> resolution{ 0, mNode, mRoot };
+    Property<std::array<float, 3>> zoom{ 1, mNode, mRoot };
+};
+
+struct ControlSettings : public Object
+{
+    ControlSettings() = default;
+    ControlSettings(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {}
+    Property<VectorTwo> velocity{ 0, mNode, mRoot };
+};
+
+struct Example : public Object
+{
+    Example() = default;
+    Example(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {}
+    PropertyArray<SensorSettings> sensors{ 0, mNode, mRoot };
+    ControlSettings controls{ 1, mNode, mRoot };
+};
 
 int main()
 {
+    Example properties{};
+    properties.controls.velocity.set({3, 4});
+    properties.sensors.resize(4);
+    properties.sensors[0].resolution.set(Resolution::R1080P);
+    properties.sensors[1].zoom.set({0, 1, 2});
 
-    ExampleProperties properties{};
-    properties.controls.velocity_x.set(3);
+    printf("%lld\n", properties.mQueue.size());
 
-    printf("%ld\n", properties.mRoot.mQueue.size());
-
-    for (const Packet& packet : properties.mRoot.mQueue)
+    for (const Packet& packet : properties.mQueue)
     {
-        printf("{ ", packet.mLength);
+        printf("{ ");
         for (int i = 0; i < packet.mLength; i++)
         {
             printf("%02X ", packet.mpData[i]);
@@ -177,10 +87,10 @@ int main()
         printf("}\n");
     }
 
-    Packet test{.mLength = 3, .mpData = {1, 1, 4}};
-    properties.mRoot.receive(test);
+    // Packet test{.mLength = 3, .mpData = {1, 1, 4}};
+    // properties.receive(test);
 
-    printf("%d\n", properties.controls.velocity_x.value());
+    // printf("%d\n", properties.controls.velocity_x.value());
 
 
     // PROPERTIES[0].index();

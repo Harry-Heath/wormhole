@@ -7,6 +7,7 @@
 #include <map>
 #include <span>
 #include <functional>
+#include <memory>
 
 #include "nodes.hpp"
 
@@ -27,12 +28,24 @@ struct Packet
 
 using Queue = std::vector<Packet>;
 
-struct PropertyRoot
+struct Object
 {
     Node mNode;
+    Object& mRoot;
+
     Queue mQueue{};
 
-    PropertyRoot() : mNode(0, nullptr) {}
+    Object() 
+        : mNode{0, nullptr}
+        , mRoot{*this} 
+    {
+    }
+
+    Object(uint8_t id, Node& parent, Object& root) 
+        : mNode{id, &parent}
+        , mRoot{root.mRoot} 
+    {
+    }
     
     void receive(const Packet& packet)
     {
@@ -55,12 +68,17 @@ template<typename T>
 struct Property
 {
     ValueNode<T> mNode;
-    PropertyRoot& mRoot;
+    Object& mRoot;
+    std::function<void(const T&)> mChanged;
 
-    Property(uint8_t id, Node& parent, PropertyRoot& root) 
+    Property(uint8_t id, Node& parent, Object& root) 
         : mNode{id, &parent}
-        , mRoot{root}
+        , mRoot{root.mRoot}
     {
+        mNode.mChanged = [this](const T& value){
+            if (this->mChanged)
+                this->mChanged(value);
+        };
     }
     
     void set(const T& value)
@@ -78,7 +96,7 @@ struct Property
             mRoot.mQueue.push_back(packet);
     }
 
-    const T& value()
+    const T& value() const
     {
         return mNode.mValue;
     }
@@ -89,14 +107,45 @@ template<typename T>
 struct PropertyArray
 {
     Node mNode;
-    PropertyRoot& mRoot;
-    std::vector<T> mProperties{};
+    Object& mRoot;
+    std::vector<std::unique_ptr<T>> mProperties{};
 
-    Property<uint8_t> mSize{0, mNode, mRoot};
+    Property<uint8_t> mSize{UINT8_MAX, mNode, mRoot};
 
-    PropertyArray(uint8_t id, Node& parent, PropertyRoot& root)
+    PropertyArray(uint8_t id, Node& parent, Object& root)
         : mNode{id, &parent}
-        , mRoot{root}
+        , mRoot{root.mRoot}
     {
+        mSize.mNode.mChanged = [this](uint8_t size){
+            this->resizeArray(size);
+            // TODO: Event, on changed
+        };
+    }
+
+    void resizeArray(uint8_t size)
+    {
+        mProperties.clear();
+        for (uint8_t i = 0; i < size; i++)
+        {
+            mProperties.push_back(std::make_unique<T>(i, mNode, mRoot));
+        }
+    }
+
+    void resize(uint8_t size)
+    {
+        resizeArray(size);
+        mSize.set(size);
+    }
+
+    uint8_t size() const { return (uint8_t)mProperties.size(); }
+
+    T& operator[](uint8_t index)
+    {
+        return *mProperties[index];
+    } 
+
+    const T& operator[](uint8_t index) const
+    {
+        return *mProperties[index];
     }
 };
