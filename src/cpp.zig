@@ -187,7 +187,7 @@ fn writeObject(self: *Self, o: Schema.Object) !void {
     writer.indent();
 
     try writer.print("{s}() = default;", .{object_name});
-    try writer.print("{s}(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {{}}", .{object_name});
+    try writer.print("{s}(uint8_t id, std::span<const uint8_t> prefix, Object& root) : Object(id, prefix, root) {{}}", .{object_name});
 
     for (o.properties) |p| {
         try self.writeProperty(p);
@@ -215,17 +215,17 @@ fn writeProperty(self: *Self, p: Schema.Property) !void {
         // Add array property
         if (p.array) |array| switch (array) {
             .variable_length => try writer.print(
-                "Property<std::vector<{s}>> {s}{{ {}, mNode, mRoot }};",
+                "Property<std::vector<{s}>> {s}{{ {}, mPrefix, mRoot }};",
                 .{ t, field_name, p.id },
             ),
             .length => |length| try writer.print(
-                "Property<std::array<{s}, {}>> {s}{{ {}, mNode, mRoot }};",
+                "Property<std::array<{s}, {}>> {s}{{ {}, mPrefix, mRoot }};",
                 .{ t, length, field_name, p.id },
             ),
         }
         // Otherwise just property
         else try writer.print(
-            "Property<{s}> {s}{{ {}, mNode, mRoot }};",
+            "Property<{s}> {s}{{ {}, mPrefix, mRoot }};",
             .{ t, field_name, p.id },
         );
     }
@@ -234,14 +234,14 @@ fn writeProperty(self: *Self, p: Schema.Property) !void {
         // Add array property
         if (p.array) |array| switch (array) {
             .variable_length => try writer.print(
-                "PropertyArray<{s}> {s}{{ {}, mNode, mRoot }};",
+                "PropertyArray<{s}> {s}{{ {}, mPrefix, mRoot }};",
                 .{ o, field_name, p.id },
             ),
             .length => return error.TODO,
         }
         // Otherwise just property
         else try writer.print(
-            "{s} {s}{{ {}, mNode, mRoot }};",
+            "{s} {s}{{ {}, mPrefix, mRoot }};",
             .{ o, field_name, p.id },
         );
     }

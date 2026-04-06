@@ -20,6 +20,7 @@ public:
 
     bool error() { return mError; }
     bool success() { return !mError; }
+    bool done() { return mIndex == mBuffer.size(); }
     size_t index() { return mIndex; }
 
     std::span<const uint8_t> take(size_t count)

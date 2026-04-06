@@ -47,24 +47,24 @@ static void write(Writer& writer, const Resolution& value)
 struct SensorSettings : public Object
 {
     SensorSettings() = default;
-    SensorSettings(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {}
-    Property<Resolution> resolution{ 0, mNode, mRoot };
-    Property<std::array<float, 3>> zoom{ 1, mNode, mRoot };
+    SensorSettings(uint8_t id, std::span<const uint8_t> prefix, Object& root) : Object(id, prefix, root) {}
+    Property<Resolution> resolution{ 0, mPrefix, mRoot };
+    Property<std::array<float, 3>> zoom{ 1, mPrefix, mRoot };
 };
 
 struct ControlSettings : public Object
 {
     ControlSettings() = default;
-    ControlSettings(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {}
-    Property<VectorTwo> velocity{ 0, mNode, mRoot };
+    ControlSettings(uint8_t id, std::span<const uint8_t> prefix, Object& root) : Object(id, prefix, root) {}
+    Property<VectorTwo> velocity{ 0, mPrefix, mRoot };
 };
 
 struct Example : public Object
 {
     Example() = default;
-    Example(uint8_t id, Node& parent, Object& root) : Object(id, parent, root) {}
-    PropertyArray<SensorSettings> sensors{ 0, mNode, mRoot };
-    ControlSettings controls{ 1, mNode, mRoot };
+    Example(uint8_t id, std::span<const uint8_t> prefix, Object& root) : Object(id, prefix, root) {}
+    PropertyArray<SensorSettings> sensors{ 0, mPrefix, mRoot };
+    ControlSettings controls{ 1, mPrefix, mRoot };
 };
 
 int main()
@@ -87,10 +87,10 @@ int main()
         printf("}\n");
     }
 
-    // Packet test{.mLength = 3, .mpData = {1, 1, 4}};
-    // properties.receive(test);
+    Packet test{.mLength = 3, .mpData = {0, 0xFF, 0}};
+    properties.receive(test);
 
-    // printf("%d\n", properties.controls.velocity_x.value());
+    printf("%d\n", (uint8_t)properties.sensors.size());
 
 
     // PROPERTIES[0].index();

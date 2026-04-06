@@ -1,15 +1,12 @@
 
 #pragma once
 
-#include <cstdint>
-#include <cstddef>
-#include <vector>
-#include <map>
-#include <span>
+#include <variant>
 #include <functional>
 #include <memory>
 
-#include "nodes.hpp"
+#include "reader_writer.hpp"
+
 
 struct Packet
 {
@@ -26,31 +23,116 @@ struct Packet
 };
 
 
-using Queue = std::vector<Packet>;
+struct IProperty
+{
+    virtual ~IProperty() = default;
+    virtual void read(Reader& reader) = 0;
+};
+
+
+struct Node
+{
+    using Map = std::map<uint8_t, Node>;
+    std::variant<Map, IProperty*> mValue;
+
+    template<typename... Args>
+    Node(Args&&... args) : mValue{std::forward<Args>(args)...} {}
+};
+
+
+static std::vector<uint8_t> make_prefix(std::span<const uint8_t> prefix, uint8_t id) 
+{
+    std::vector<uint8_t> vector(prefix.begin(), prefix.end());
+    vector.push_back(id);
+    return vector;
+}
+
 
 struct Object
 {
-    Node mNode;
+    std::vector<uint8_t> mPrefix;
     Object& mRoot;
 
-    Queue mQueue{};
+    Node::Map mMap{};
+    std::vector<Packet> mQueue{};
 
-    Object() 
-        : mNode{0, nullptr}
-        , mRoot{*this} 
+    Object()
+        : mPrefix({})
+        , mRoot(*this)
     {
     }
 
-    Object(uint8_t id, Node& parent, Object& root) 
-        : mNode{id, &parent}
-        , mRoot{root.mRoot} 
+    Object(uint8_t id, std::span<const uint8_t> prefix, Object& root)
+        : mPrefix(make_prefix(prefix, id))
+        , mRoot(root)
     {
     }
-    
+
+    void addProperty(std::span<const uint8_t> prefix, IProperty* property)
+    {
+        if (prefix.size() == 0) return;
+
+        Node::Map* map = &mMap;
+        for (int i = 0; i < prefix.size() - 1; i++)
+        {
+            uint8_t id = prefix[i];
+            auto it = map->find(id);
+            if (it == map->end())
+                it = map->insert({id, Node::Map{}}).first;
+
+            auto& variant = it->second.mValue;
+            map = &std::get<Node::Map>(variant);
+        }
+
+        map->insert({prefix[prefix.size() - 1], property});
+    }
+
+    void removeProperty(std::span<const uint8_t> prefix)
+    {
+        if (prefix.size() == 0) return;
+
+        Node::Map* map = &mMap;
+        for (int i = 0; i < prefix.size() - 1; i++)
+        {
+            uint8_t id = prefix[i];
+            auto it = map->find(id);
+            if (it == map->end()) return;
+
+            auto& variant = it->second.mValue;
+            map = &std::get<Node::Map>(variant);
+        }
+
+        map->erase(prefix[prefix.size() - 1]);
+    }
+
     void receive(const Packet& packet)
     {
         Reader reader{packet};
-        mNode.read(reader);
+
+        Node::Map* map = &mMap;
+        while (true)
+        {
+            uint8_t id{};
+            reader.read(id);
+
+            if (reader.error()) 
+                break;
+
+            auto it = map->find(id);
+            if (it == map->end()) 
+                break;
+
+            std::variant<Node::Map, IProperty*>& variant = it->second.mValue;
+            if (Node::Map* next_map = std::get_if<Node::Map>(&variant))
+            {
+                map = next_map;
+            }
+            else if (IProperty** property = std::get_if<IProperty*>(&variant))
+            {
+                (*property)->read(reader);
+                break;
+            }
+        }
     }
 
     template<typename Func>
@@ -64,32 +146,58 @@ struct Object
     }
 };
 
-template<typename T>
-struct Property
-{
-    ValueNode<T> mNode;
-    Object& mRoot;
-    std::function<void(const T&)> mChanged;
 
-    Property(uint8_t id, Node& parent, Object& root) 
-        : mNode{id, &parent}
-        , mRoot{root.mRoot}
-    {
-        mNode.mChanged = [this](const T& value){
-            if (this->mChanged)
-                this->mChanged(value);
-        };
-    }
+
+
+
+template<typename T>
+struct Property : public IProperty
+{
+    std::vector<uint8_t> mPrefix;
+    Object& mRoot;
     
+    T mValue{};
+    std::function<void(const T&)> mChanged{};
+
+    Property(uint8_t id, std::span<const uint8_t> prefix, Object& root)
+        : mPrefix(make_prefix(prefix, id))
+        , mRoot(root)
+    {
+        mRoot.addProperty(mPrefix, this);
+    }
+
+    Property(const Property&) = delete;
+    Property& operator=(const Property&) = delete;
+
+    void read(Reader& reader) final 
+    {
+        T temp{};
+        reader.read(temp);
+
+        if (!reader.done())
+            reader.take(10000); // TODO: set error
+
+        if (reader.error())
+            return;
+        
+        mValue = temp;
+
+        if (mChanged) 
+            mChanged(mValue);
+    }
+
     void set(const T& value)
     {
-        mNode.mValue = value;
+        mValue = value;
 
         Packet packet{Packet::MAX_SIZE};
 
         Writer writer{packet};
-        mNode.write(writer);
 
+        for (const uint8_t& b : mPrefix)
+            writer.write(b);
+
+        writer.write(mValue);
         packet.mLength = writer.index();
         
         if (writer.success())
@@ -98,7 +206,7 @@ struct Property
 
     const T& value() const
     {
-        return mNode.mValue;
+        return mValue;
     }
 };
 
@@ -106,28 +214,30 @@ struct Property
 template<typename T>
 struct PropertyArray
 {
-    Node mNode;
+    std::vector<uint8_t> mPrefix;
     Object& mRoot;
+
+    Property<uint8_t> mSize{UINT8_MAX, mPrefix, mRoot};
     std::vector<std::unique_ptr<T>> mProperties{};
 
-    Property<uint8_t> mSize{UINT8_MAX, mNode, mRoot};
-
-    PropertyArray(uint8_t id, Node& parent, Object& root)
-        : mNode{id, &parent}
-        , mRoot{root.mRoot}
+    PropertyArray(uint8_t id, std::span<const uint8_t> prefix, Object& root)
+        : mPrefix(make_prefix(prefix, id))
+        , mRoot(root)
     {
-        mSize.mNode.mChanged = [this](uint8_t size){
+        mSize.mChanged = [this](uint8_t size)
+        {
             this->resizeArray(size);
-            // TODO: Event, on changed
         };
     }
 
     void resizeArray(uint8_t size)
     {
+        mRoot.removeProperty(mPrefix);
+        mRoot.addProperty(mSize.mPrefix, &mSize);
         mProperties.clear();
         for (uint8_t i = 0; i < size; i++)
         {
-            mProperties.push_back(std::make_unique<T>(i, mNode, mRoot));
+            mProperties.push_back(std::make_unique<T>(i, mPrefix, mRoot));
         }
     }
 
@@ -149,3 +259,4 @@ struct PropertyArray
         return *mProperties[index];
     }
 };
+
