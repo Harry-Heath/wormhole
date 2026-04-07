@@ -24,6 +24,9 @@ pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
         .object_map = .init(gpa),
     };
 
+    try writer.print("#pragma once\n", .{});
+    try writer.print("#include \"wormhole.hpp\"\n", .{});
+
     try self.setupTypeMap();
     try self.setupObjectMap();
     try self.writeTypes();
@@ -106,7 +109,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         try writer.print("}};\n", .{});
 
         // Read function
-        try writer.print("static void read(Reader& reader, {s}& value)", .{type_name});
+        try writer.print("static void read(wh::Reader& reader, {s}& value)", .{type_name});
         try writer.print("{{", .{});
         writer.indent();
 
@@ -119,7 +122,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         try writer.print("}}\n", .{});
 
         // Write function
-        try writer.print("static void write(Writer& writer, const {s}& value)", .{type_name});
+        try writer.print("static void write(wh::Writer& writer, const {s}& value)", .{type_name});
         try writer.print("{{", .{});
         writer.indent();
 
@@ -149,7 +152,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         try writer.print("}};\n", .{});
 
         // Read function
-        try writer.print("static void read(Reader& reader, {s}& value)", .{type_name});
+        try writer.print("static void read(wh::Reader& reader, {s}& value)", .{type_name});
         try writer.print("{{", .{});
         writer.indent();
 
@@ -161,7 +164,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         try writer.print("}}\n", .{});
 
         // Write function
-        try writer.print("static void write(Writer& writer, const {s}& value)", .{type_name});
+        try writer.print("static void write(wh::Writer& writer, const {s}& value)", .{type_name});
         try writer.print("{{", .{});
         writer.indent();
 
@@ -182,12 +185,12 @@ fn writeObject(self: *Self, o: Schema.Object) !void {
     const writer = self.writer;
     const object_name = self.object_map.get(o.name).?;
 
-    try writer.print("struct {s} : public Object", .{object_name});
+    try writer.print("struct {s} : public wh::Object", .{object_name});
     try writer.print("{{", .{});
     writer.indent();
 
     try writer.print("{s}() = default;", .{object_name});
-    try writer.print("{s}(uint8_t id, std::span<const uint8_t> prefix, Object& root) : Object(id, prefix, root) {{}}", .{object_name});
+    try writer.print("{s}(uint8_t id, std::span<const uint8_t> prefix, wh::Object& root) : wh::Object(id, prefix, root) {{}}", .{object_name});
 
     for (o.properties) |p| {
         try self.writeProperty(p);
@@ -216,20 +219,20 @@ fn writeProperty(self: *Self, p: Schema.Property) !void {
         if (p.array) |array| switch (array) {
             .variable_length => {
                 try writer.print(
-                    "PropertyArray<Property<{s}>> {s}{{ {}, mPrefix, mRoot }};",
+                    "wh::PropertyArray<wh::Property<{s}>> {s}{{ {}, mPrefix, mRoot }};",
                     .{ t, field_name, p.id },
                 );
             },
             .length => |length| {
                 try writer.print(
-                    "PropertyArray<Property<{s}>> {s}{{ {}, mPrefix, mRoot, {} }};",
+                    "wh::PropertyArray<wh::Property<{s}>> {s}{{ {}, mPrefix, mRoot, {} }};",
                     .{ t, field_name, p.id, length },
                 );
             },
         }
         // Otherwise just property
         else try writer.print(
-            "Property<{s}> {s}{{ {}, mPrefix, mRoot }};",
+            "wh::Property<{s}> {s}{{ {}, mPrefix, mRoot }};",
             .{ t, field_name, p.id },
         );
     }
@@ -239,13 +242,13 @@ fn writeProperty(self: *Self, p: Schema.Property) !void {
         if (p.array) |array| switch (array) {
             .variable_length => {
                 try writer.print(
-                    "PropertyArray<{s}> {s}{{ {}, mPrefix, mRoot }};",
+                    "wh::PropertyArray<{s}> {s}{{ {}, mPrefix, mRoot }};",
                     .{ o, field_name, p.id },
                 );
             },
             .length => |length| {
                 try writer.print(
-                    "PropertyArray<{s}> {s}{{ {}, mPrefix, mRoot, {} }};",
+                    "wh::PropertyArray<{s}> {s}{{ {}, mPrefix, mRoot, {} }};",
                     .{ o, field_name, p.id, length },
                 );
             },

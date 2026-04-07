@@ -13,12 +13,16 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(gpa);
     const cwd = Dir.cwd();
 
-    if (args.len != 3)
+    if (args.len != 4)
         return error.BadArgCount;
 
+    // Args
+    const input_filename = args[1];
+    const lang = args[2];
+    const output_filename = args[3];
+
     // Read file
-    const filename = args[1];
-    const file = try cwd.readFileAllocOptions(io, filename, gpa, .unlimited, .of(u8), 0);
+    const file = try cwd.readFileAllocOptions(io, input_filename, gpa, .unlimited, .of(u8), 0);
 
     // Parse zon
     var diag: zon.Diagnostics = .{};
@@ -35,11 +39,17 @@ pub fn main(init: std.process.Init) !void {
         else => return err,
     };
 
-    const lang = args[2];
-
+    // Generate file
+    var output: []const u8 = &.{};
     if (std.mem.eql(u8, lang, "cpp")) {
-        std.debug.print("{s}", .{try cpp.write(schema, gpa)});
+        output = try cpp.write(schema, gpa);
     } else if (std.mem.eql(u8, lang, "ts")) {
-        std.debug.print("{s}", .{try ts.write(schema, gpa)});
+        output = try ts.write(schema, gpa);
     } else return error.UnknownLang;
+
+    // Write to file
+    try cwd.writeFile(io, .{
+        .sub_path = output_filename,
+        .data = output,
+    });
 }

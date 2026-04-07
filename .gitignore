@@ -4,3 +4,5 @@ zig-pkg/
 *.o
 
 .vscode/
+
+*.zon.*

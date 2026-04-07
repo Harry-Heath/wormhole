@@ -40,6 +40,13 @@ pub fn build(b: *std.Build) void {
         .flags = &.{"-std=c++20"},
     });
     cpp_test_mod.addIncludePath(b.path("lib/cpp"));
+
+    const cpp_gen_run = b.addRunArtifact(exe);
+    cpp_gen_run.addFileArg(b.path("test/example.zon"));
+    cpp_gen_run.addArg("cpp");
+    const cpp_gen = cpp_gen_run.addOutputFileArg("example.zon.hpp");
+    cpp_test_mod.addIncludePath(cpp_gen.dirname());
+
     const cpp_test_exe = b.addExecutable(.{
         .name = "cpp_test",
         .root_module = cpp_test_mod,
@@ -50,8 +57,14 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&cpp_test_run.step);
 
     // Ts tests
+    const ts_gen_run = b.addRunArtifact(exe);
+    ts_gen_run.addFileArg(b.path("test/example.zon"));
+    ts_gen_run.addArg("ts");
+    ts_gen_run.addArg("test/ts/example.zon.ts");
+
     const ts_test_run = b.addSystemCommand(&.{ "npx", "ts-node", "test/ts/main.ts" });
     const ts_test_step = b.step("test-ts", "Run ts tests");
+    ts_test_run.step.dependOn(&ts_gen_run.step);
     ts_test_step.dependOn(&ts_test_run.step);
     test_step.dependOn(&ts_test_run.step);
 }

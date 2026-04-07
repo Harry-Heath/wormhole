@@ -27,6 +27,8 @@ pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
         .object_map = .init(gpa),
     };
 
+    try writer.print("import {{Packet, Params, WhObject, Property, PropertyArray, types}} from './wormhole';\n", .{});
+
     try self.setupTypeMap();
     try self.setupObjectMap();
     try self.writeTypes();
@@ -38,15 +40,15 @@ pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
 fn setupTypeMap(self: *Self) !void {
     const map = &self.type_map;
 
-    try map.put("u8", .{ .type_name = "number", .desc_name = "rw.U8" });
-    try map.put("u16", .{ .type_name = "number", .desc_name = "rw.U16" });
-    try map.put("u32", .{ .type_name = "number", .desc_name = "rw.U32" });
-    try map.put("u64", .{ .type_name = "bigint", .desc_name = "rw.U64" });
+    try map.put("u8", .{ .type_name = "number", .desc_name = "types.U8" });
+    try map.put("u16", .{ .type_name = "number", .desc_name = "types.U16" });
+    try map.put("u32", .{ .type_name = "number", .desc_name = "types.U32" });
+    try map.put("u64", .{ .type_name = "bigint", .desc_name = "types.U64" });
 
     // TODO: signed
 
-    try map.put("f32", .{ .type_name = "number", .desc_name = "rw.F32" });
-    try map.put("f64", .{ .type_name = "number", .desc_name = "rw.F64" });
+    try map.put("f32", .{ .type_name = "number", .desc_name = "types.F32" });
+    try map.put("f64", .{ .type_name = "number", .desc_name = "types.F64" });
 
     for (self.schema.types) |t| {
 
@@ -57,7 +59,7 @@ fn setupTypeMap(self: *Self) !void {
         }
 
         const type_name = try case.allocTo(self.gpa, .pascal, t.name);
-        const rw_type = if (t.values != null) "rw.U8" else try std.fmt.allocPrint(self.gpa, "{s}Desc", .{type_name});
+        const rw_type = if (t.values != null) "types.U8" else try std.fmt.allocPrint(self.gpa, "{s}Desc", .{type_name});
         try map.put(t.name, .{ .type_name = type_name, .desc_name = rw_type });
     }
 }
@@ -84,7 +86,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
     if (t.fields) |fields| {
 
         // Type definition
-        try writer.print("type {s} = {{", .{type_info.type_name});
+        try writer.print("export type {s} = {{", .{type_info.type_name});
         writer.indent();
 
         for (fields) |field| {
@@ -104,7 +106,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
         try writer.print("}};\n", .{});
 
         // Desc definition
-        try writer.print("const {s} = rw.makeTypeDesc<{s}>({{", .{ type_info.desc_name, type_info.type_name });
+        try writer.print("const {s} = types.makeTypeDesc<{s}>({{", .{ type_info.desc_name, type_info.type_name });
         writer.indent();
 
         for (fields) |field| {
@@ -112,8 +114,8 @@ fn writeType(self: *Self, t: Schema.Type) !void {
             const field_name = try case.allocTo(self.gpa, .snake, field.name);
 
             if (field.array) |array| switch (array) {
-                .variable_length => try writer.print("{s}: rw.makeVectorDesc({s}),", .{ field_name, field_type.desc_name }),
-                .length => |length| try writer.print("{s}: rw.makeArrayDesc({}, {s}),", .{ field_name, length, field_type.desc_name }),
+                .variable_length => try writer.print("{s}: types.makeVectorDesc({s}),", .{ field_name, field_type.desc_name }),
+                .length => |length| try writer.print("{s}: types.makeArrayDesc({}, {s}),", .{ field_name, length, field_type.desc_name }),
             } else try writer.print("{s}: {s},", .{ field_name, field_type.desc_name });
         }
 
@@ -125,7 +127,7 @@ fn writeType(self: *Self, t: Schema.Type) !void {
     if (t.values) |values| {
 
         // Enum definition
-        try writer.print("enum {s} {{", .{type_info.type_name});
+        try writer.print("export enum {s} {{", .{type_info.type_name});
         writer.indent();
 
         for (values) |value| {
@@ -148,7 +150,7 @@ fn writeObject(self: *Self, o: Schema.Object) !void {
     const writer = self.writer;
     const object_name = self.object_map.get(o.name).?;
 
-    try writer.print("class {s} extends Object2", .{object_name});
+    try writer.print("export class {s} extends WhObject", .{object_name});
     try writer.print("{{", .{});
     writer.indent();
 
