@@ -4,6 +4,7 @@ const Io = std.Io;
 const Dir = Io.Dir;
 const Schema = @import("Schema.zig");
 
+const cli = @import("cli.zig");
 const cpp = @import("cpp.zig");
 const ts = @import("ts.zig");
 
@@ -13,16 +14,17 @@ pub fn main(init: std.process.Init) !void {
     const args = try init.minimal.args.toSlice(gpa);
     const cwd = Dir.cwd();
 
-    if (args.len != 4)
-        return error.BadArgCount;
-
-    // Args
-    const input_filename = args[1];
-    const lang = args[2];
-    const output_filename = args[3];
+    // Parse args
+    const parsed_args = cli.parseArgs(args) catch |err| {
+        try cli.printHelp(io);
+        switch (err) {
+            error.Help => return,
+            error.MissingArgs, error.BadArgs => return err,
+        }
+    };
 
     // Read file
-    const file = try cwd.readFileAllocOptions(io, input_filename, gpa, .unlimited, .of(u8), 0);
+    const file = try cwd.readFileAllocOptions(io, parsed_args.input, gpa, .unlimited, .of(u8), 0);
 
     // Parse zon
     var diag: zon.Diagnostics = .{};
@@ -34,22 +36,20 @@ pub fn main(init: std.process.Init) !void {
             const writer = &stderr.file_writer.interface;
             try writer.print("Failed to parse zon file:\n", .{});
             try diag.format(writer);
-            std.process.exit(1);
+            return err;
         },
         else => return err,
     };
 
     // Generate file
-    var output: []const u8 = &.{};
-    if (std.mem.eql(u8, lang, "cpp")) {
-        output = try cpp.write(schema, gpa);
-    } else if (std.mem.eql(u8, lang, "ts")) {
-        output = try ts.write(schema, gpa);
-    } else return error.UnknownLang;
+    const output = switch (parsed_args.language) {
+        .cpp => try cpp.write(schema, gpa),
+        .ts => try ts.write(schema, gpa),
+    };
 
     // Write to file
     try cwd.writeFile(io, .{
-        .sub_path = output_filename,
+        .sub_path = parsed_args.output,
         .data = output,
     });
 }

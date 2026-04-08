@@ -6,6 +6,8 @@ const Self = @This();
 
 const Map = std.StringHashMap([]const u8);
 
+const library_source = @embedFile("../lib/cpp/wormhole.hpp");
+
 schema: Schema,
 gpa: std.mem.Allocator,
 writer: *IndentedWriter,

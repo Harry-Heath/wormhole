@@ -4,6 +4,8 @@ const IndentedWriter = @import("IndentedWriter.zig");
 const case = @import("case");
 const Self = @This();
 
+const library_source = @embedFile("../lib/ts/wormhole.ts");
+
 schema: Schema,
 gpa: std.mem.Allocator,
 writer: *IndentedWriter,
