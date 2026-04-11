@@ -6,7 +6,7 @@ const Self = @This();
 
 const Map = std.StringHashMap([]const u8);
 
-const library_source = @embedFile("../lib/cpp/wormhole.hpp");
+const library_source = @embedFile("lib_cpp");
 
 schema: Schema,
 gpa: std.mem.Allocator,
@@ -14,12 +14,19 @@ writer: *IndentedWriter,
 type_map: Map,
 object_map: Map,
 
-pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
+pub const Options = struct {
+    schema: Schema,
+    gpa: std.mem.Allocator,
+    embed: bool,
+};
+
+pub fn write(options: Options) ![]const u8 {
+    const gpa = options.gpa;
     var string: std.Io.Writer.Allocating = .init(gpa);
     var writer: IndentedWriter = .init(&string.writer);
 
     var self: Self = .{
-        .schema = schema,
+        .schema = options.schema,
         .gpa = gpa,
         .writer = &writer,
         .type_map = .init(gpa),
@@ -27,7 +34,12 @@ pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
     };
 
     try writer.print("#pragma once\n", .{});
-    try writer.print("#include \"wormhole.hpp\"\n", .{});
+
+    if (options.embed) {
+        try writer.print("{s}\n", .{library_source});
+    } else {
+        try writer.print("#include \"wormhole.hpp\"\n", .{});
+    }
 
     try self.setupTypeMap();
     try self.setupObjectMap();

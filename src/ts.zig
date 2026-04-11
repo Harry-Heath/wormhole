@@ -4,7 +4,7 @@ const IndentedWriter = @import("IndentedWriter.zig");
 const case = @import("case");
 const Self = @This();
 
-const library_source = @embedFile("../lib/ts/wormhole.ts");
+const library_source = @embedFile("lib_ts");
 
 schema: Schema,
 gpa: std.mem.Allocator,
@@ -12,24 +12,35 @@ writer: *IndentedWriter,
 type_map: std.StringHashMap(TypeInfo),
 object_map: std.StringHashMap([]const u8),
 
+pub const Options = struct {
+    schema: Schema,
+    gpa: std.mem.Allocator,
+    embed: bool,
+};
+
 const TypeInfo = struct {
     type_name: []const u8,
     desc_name: []const u8,
 };
 
-pub fn write(schema: Schema, gpa: std.mem.Allocator) ![]const u8 {
+pub fn write(options: Options) ![]const u8 {
+    const gpa = options.gpa;
     var string: std.Io.Writer.Allocating = .init(gpa);
     var writer: IndentedWriter = .init(&string.writer);
 
     var self: Self = .{
-        .schema = schema,
+        .schema = options.schema,
         .gpa = gpa,
         .writer = &writer,
         .type_map = .init(gpa),
         .object_map = .init(gpa),
     };
 
-    try writer.print("import {{Packet, Params, WhObject, Property, PropertyArray, types}} from './wormhole';\n", .{});
+    if (options.embed) {
+        try writer.print("{s}\n", .{library_source});
+    } else {
+        try writer.print("import {{Packet, Params, WhObject, Property, PropertyArray, types}} from './wormhole';\n", .{});
+    }
 
     try self.setupTypeMap();
     try self.setupObjectMap();

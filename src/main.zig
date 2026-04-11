@@ -2,8 +2,8 @@ const std = @import("std");
 const zon = std.zon.parse;
 const Io = std.Io;
 const Dir = Io.Dir;
-const Schema = @import("Schema.zig");
 
+const Schema = @import("Schema.zig");
 const cli = @import("cli.zig");
 const cpp = @import("cpp.zig");
 const ts = @import("ts.zig");
@@ -43,8 +43,16 @@ pub fn main(init: std.process.Init) !void {
 
     // Generate file
     const output = switch (parsed_args.language) {
-        .cpp => try cpp.write(schema, gpa),
-        .ts => try ts.write(schema, gpa),
+        .cpp => try cpp.write(.{
+            .schema = schema,
+            .gpa = gpa,
+            .embed = parsed_args.embed_library,
+        }),
+        .ts => try ts.write(.{
+            .schema = schema,
+            .gpa = gpa,
+            .embed = parsed_args.embed_library,
+        }),
     };
 
     // Write to file
